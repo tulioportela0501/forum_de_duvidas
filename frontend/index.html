@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fórum Acadêmico — Dicionário de Tags (AVL)</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="cabecalho">
+    <h1>Fórum Acadêmico</h1>
+    <p class="subtitulo">Encontre e organize termos acadêmicos.</p>
+  </header>
+
+  <main class="conteudo">
+
+    <!-- ===================== BUSCA / AUTOCOMPLETAÇÃO (RF05) ===================== -->
+    <section class="cartao">
+      <h2>Buscar tag</h2>
+      <div class="campo-busca">
+        <input type="text" id="campo-busca" placeholder="Digite uma tag..." autocomplete="off">
+        <ul id="sugestoes" class="sugestoes"></ul>
+      </div>
+      <p class="dica">As sugestões aparecem enquanto você digita (busca por prefixo na AVL).</p>
+      <div id="resultado-busca" class="resultado"></div>
+    </section>
+
+    <!-- ===================== CADASTRO (RF01) ===================== -->
+    <section class="cartao">
+      <h2>Cadastrar tag</h2>
+      <div class="formulario">
+        <label for="campo-tag">Tag</label>
+        <input type="text" id="campo-tag" placeholder="Ex.: EstruturaDeDados">
+
+        <label for="campo-descricao">Descrição (opcional)</label>
+        <input type="text" id="campo-descricao" placeholder="Ex.: Conteúdos de listas, pilhas e árvores">
+
+        <button id="btn-adicionar">Adicionar tag</button>
+      </div>
+      <div id="aviso" class="aviso"></div>
+    </section>
+
+    <!-- ===================== LISTAGEM (RF06 / RF07) ===================== -->
+    <section class="cartao">
+      <div class="linha-titulo">
+        <h2>Tags cadastradas</h2>
+        <div class="botoes-demo">
+          <button id="btn-cenario" class="secundario">Carregar cenário aula1..aula20</button>
+          <button id="btn-limpar" class="perigo-suave">Limpar tudo</button>
+        </div>
+      </div>
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th>Tag</th>
+            <th>Descrição</th>
+            <th>Usos</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="corpo-tabela"></tbody>
+      </table>
+      <p class="dica">
+        Uma tag só pode ser removida quando o contador de uso chegar a zero (RN02).
+        Use os botões <strong>−</strong> para simular a exclusão de tópicos.
+      </p>
+    </section>
+
+    <!-- ===================== ÁREA ACADÊMICA / DEBUG (RF09 / RF10) ===================== -->
+    <section class="cartao debug">
+      <h2>Área acadêmica / debug</h2>
+
+      <div class="metricas">
+        <div class="metrica"><span id="m-altura">0</span><small>Altura da AVL</small></div>
+        <div class="metrica"><span id="m-nos">0</span><small>Nós</small></div>
+        <div class="metrica"><span id="m-rotacoes">0</span><small>Rotações</small></div>
+        <div class="metrica"><span id="m-balanceada">—</span><small>FB ∈ {-1,0,1}</small></div>
+      </div>
+
+      <h3>Estrutura da árvore</h3>
+      <p class="dica">Cada linha mostra: altura (h), fator de balanceamento (FB) e contador de uso.</p>
+      <pre id="arvore" class="arvore">(árvore vazia)</pre>
+    </section>
+
+  </main>
+
+  <footer class="rodape">
+    Projeto acadêmico — Árvore AVL implementada manualmente em Python.
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

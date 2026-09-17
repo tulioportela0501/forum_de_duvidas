@@ -1,0 +1,33 @@
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode e cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# Variaveis de ambiente (dados sensiveis)
+.env
+.env.local
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*~
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos temporarios
+*.log
+*.tmp

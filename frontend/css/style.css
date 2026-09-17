@@ -1,0 +1,184 @@
+/* =========================================================================
+   style.css — visual simples e moderno, sem framework.
+   Mantido propositalmente em CSS puro para ser fácil de ler e modificar.
+   ========================================================================= */
+
+:root {
+  --fundo: #0f1420;
+  --cartao: #182033;
+  --borda: #27324a;
+  --texto: #e6ebf5;
+  --texto-suave: #98a3ba;
+  --destaque: #5b8cff;
+  --ok: #3fbf7f;
+  --alerta: #ffb65c;
+  --erro: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+/* ---------------- Cabeçalho ---------------- */
+.cabecalho {
+  padding: 40px 24px 28px;
+  text-align: center;
+  border-bottom: 1px solid var(--borda);
+  background: linear-gradient(180deg, #131a2b, #0f1420);
+}
+.cabecalho h1 { margin: 0; font-size: 2rem; letter-spacing: -0.5px; }
+.subtitulo { margin: 6px 0 0; color: var(--texto-suave); }
+
+/* ---------------- Layout ---------------- */
+.conteudo {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cartao {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 20px;
+}
+.cartao h2 { margin: 0 0 14px; font-size: 1.15rem; }
+.cartao h3 { margin: 20px 0 6px; font-size: 1rem; color: var(--texto-suave); }
+
+.linha-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dica { color: var(--texto-suave); font-size: 0.85rem; margin: 10px 0 0; }
+
+/* ---------------- Campos ---------------- */
+input[type="text"] {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: #0e1422;
+  color: var(--texto);
+  font-size: 0.95rem;
+}
+input[type="text"]:focus { outline: 2px solid var(--destaque); border-color: transparent; }
+
+.formulario { display: flex; flex-direction: column; gap: 6px; }
+.formulario label { font-size: 0.82rem; color: var(--texto-suave); margin-top: 6px; }
+
+button {
+  margin-top: 14px;
+  padding: 11px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--destaque);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.1); }
+button.secundario { background: #2b3550; }
+button.perigo-suave { background: #46293a; }
+
+.botoes-demo button { margin-top: 0; font-size: 0.8rem; padding: 8px 12px; }
+
+/* ---------------- Autocompletação ---------------- */
+.campo-busca { position: relative; }
+
+.sugestoes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  position: absolute;
+  width: 100%;
+  background: #0e1422;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 10;
+  display: none;
+}
+.sugestoes.visivel { display: block; }
+.sugestoes li {
+  padding: 10px 13px;
+  cursor: pointer;
+  border-bottom: 1px solid #141b2c;
+  font-size: 0.9rem;
+}
+.sugestoes li:last-child { border-bottom: none; }
+.sugestoes li:hover { background: #1b2540; }
+.sugestoes .contador { float: right; color: var(--texto-suave); font-size: 0.8rem; }
+
+.resultado { margin-top: 12px; font-size: 0.9rem; }
+
+/* ---------------- Tabela ---------------- */
+.tabela { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9rem; }
+.tabela th, .tabela td {
+  text-align: left;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--borda);
+}
+.tabela th { color: var(--texto-suave); font-weight: 600; font-size: 0.8rem; }
+.tabela .acoes button {
+  margin: 0 3px 0 0;
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  background: #243050;
+}
+.tabela .acoes .remover { background: #4a2233; }
+
+/* ---------------- Debug ---------------- */
+.metricas { display: flex; gap: 12px; flex-wrap: wrap; }
+.metrica {
+  flex: 1;
+  min-width: 110px;
+  background: #0e1422;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+.metrica span { display: block; font-size: 1.6rem; font-weight: 700; color: var(--destaque); }
+.metrica small { color: var(--texto-suave); font-size: 0.75rem; }
+
+.arvore {
+  background: #0b101c;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.82rem;
+  color: #c8d3e8;
+  white-space: pre;
+  max-height: 420px;
+}
+
+/* ---------------- Avisos ---------------- */
+.aviso { margin-top: 12px; font-size: 0.88rem; min-height: 20px; }
+.aviso.ok { color: var(--ok); }
+.aviso.erro { color: var(--erro); }
+.aviso.info { color: var(--alerta); }
+
+.rodape {
+  text-align: center;
+  padding: 22px;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--borda);
+}
