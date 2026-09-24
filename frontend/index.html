@@ -3,92 +3,270 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fórum Acadêmico — Dicionário de Tags (AVL)</title>
+  <title>AVL Tag Dictionary — Fórum Acadêmico</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
+  <!-- ===================== HEADER ===================== -->
   <header class="cabecalho">
-    <h1>Fórum Acadêmico</h1>
-    <p class="subtitulo">Encontre e organize termos acadêmicos.</p>
+    <button id="btn-menu" class="botao-icone somente-mobile" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+      <span class="icone-menu"></span>
+    </button>
+
+    <div class="marca">
+      <span class="marca-titulo">AVL Tag Dictionary</span>
+      <span class="marca-subtitulo">Dicionário de tags do fórum acadêmico</span>
+    </div>
+
+    <div class="indicadores-cabecalho">
+      <span id="status-api" class="indicador" title="Conectividade com a API Flask">
+        <span class="ponto"></span> API
+      </span>
+      <span id="status-balanceamento" class="indicador" title="Fator de balanceamento de todos os nós">
+        <span class="ponto"></span> AVL balanceada
+      </span>
+    </div>
   </header>
 
-  <main class="conteudo">
+  <div class="corpo">
 
-    <!-- ===================== BUSCA / AUTOCOMPLETAÇÃO (RF05) ===================== -->
-    <section class="cartao">
-      <h2>Buscar tag</h2>
-      <div class="campo-busca">
-        <input type="text" id="campo-busca" placeholder="Digite uma tag..." autocomplete="off">
-        <ul id="sugestoes" class="sugestoes"></ul>
-      </div>
-      <p class="dica">As sugestões aparecem enquanto você digita (busca por prefixo na AVL).</p>
-      <div id="resultado-busca" class="resultado"></div>
-    </section>
+    <!-- ===================== SIDEBAR ===================== -->
+    <nav id="sidebar" class="sidebar">
+      <ul class="menu-nav">
+        <li><button class="item-nav ativo" data-secao="visao-geral" aria-current="page">Visão Geral</button></li>
+        <li><button class="item-nav" data-secao="visualizador">Visualizador AVL</button></li>
+        <li><button class="item-nav" data-secao="autocomplete">Autocomplete EAD</button></li>
+        <li><button class="item-nav" data-secao="gerenciar">Inserção / Remoção</button></li>
+        <li><button class="item-nav" data-secao="metricas">Métricas</button></li>
+        <li><button class="item-nav" data-secao="logs">Logs</button></li>
+        <li><button class="item-nav" data-secao="casos-de-uso">Casos de Uso</button></li>
+      </ul>
+      <p class="nota-sidebar">Projeto acadêmico — a árvore AVL é implementada manualmente em Python (backend).</p>
+    </nav>
 
-    <!-- ===================== CADASTRO (RF01) ===================== -->
-    <section class="cartao">
-      <h2>Cadastrar tag</h2>
-      <div class="formulario">
-        <label for="campo-tag">Tag</label>
-        <input type="text" id="campo-tag" placeholder="Ex.: EstruturaDeDados">
+    <!-- ===================== CONTEÚDO PRINCIPAL ===================== -->
+    <main class="conteudo">
 
-        <label for="campo-descricao">Descrição (opcional)</label>
-        <input type="text" id="campo-descricao" placeholder="Ex.: Conteúdos de listas, pilhas e árvores">
+      <!-- ---------- VISÃO GERAL ---------- -->
+      <section id="secao-visao-geral" class="secao ativa" aria-labelledby="titulo-visao-geral">
+        <h1 id="titulo-visao-geral">Visão geral</h1>
+        <p class="texto-explicativo">
+          Este painel visualiza o dicionário de tags do fórum, estruturado como uma
+          Árvore AVL. Cada tag é um nó; a árvore se rebalanceia sozinha a cada
+          inserção ou remoção para garantir buscas em tempo O(log n).
+        </p>
 
-        <button id="btn-adicionar">Adicionar tag</button>
-      </div>
-      <div id="aviso" class="aviso"></div>
-    </section>
-
-    <!-- ===================== LISTAGEM (RF06 / RF07) ===================== -->
-    <section class="cartao">
-      <div class="linha-titulo">
-        <h2>Tags cadastradas</h2>
-        <div class="botoes-demo">
-          <button id="btn-cenario" class="secundario">Carregar cenário aula1..aula20</button>
-          <button id="btn-limpar" class="perigo-suave">Limpar tudo</button>
+        <div class="grade-cartoes-resumo">
+          <article class="cartao cartao-resumo">
+            <h2>Estrutura</h2>
+            <p>Chave normalizada (case-insensitive), altura, fator de balanceamento e contador de uso por nó.</p>
+            <button class="botao secundario" data-ir-para="visualizador">Ver árvore</button>
+          </article>
+          <article class="cartao cartao-resumo">
+            <h2>Autocompletação</h2>
+            <p>Busca por prefixo com poda de subárvores, igual à usada por um aluno ao classificar uma dúvida.</p>
+            <button class="botao secundario" data-ir-para="autocomplete">Testar busca</button>
+          </article>
+          <article class="cartao cartao-resumo">
+            <h2>Cenário aula1–aula20</h2>
+            <p>Carga em ordem alfabética para provar que a AVL não degenera em lista.</p>
+            <button class="botao secundario" data-ir-para="casos-de-uso">Ver caso de uso</button>
+          </article>
         </div>
+
+        <div class="cartao">
+          <h2>Resumo rápido</h2>
+          <div id="mini-metricas" class="mini-metricas"></div>
+        </div>
+      </section>
+
+      <!-- ---------- VISUALIZADOR AVL ---------- -->
+      <section id="secao-visualizador" class="secao" aria-labelledby="titulo-visualizador">
+        <h1 id="titulo-visualizador">Visualizador da Árvore AVL</h1>
+        <p class="texto-explicativo">
+          Passe o mouse sobre um nó para ver altura, fator de balanceamento e uso.
+          Uma rotação executada pelo backend aparece destacada logo abaixo da árvore.
+        </p>
+
+        <div class="cartao cartao-arvore">
+          <div class="cabecalho-cartao">
+            <h2>Árvore atual</h2>
+            <span id="aviso-rotacao" class="aviso-rotacao" hidden></span>
+          </div>
+          <div id="container-svg" class="container-svg" role="img" aria-label="Representação visual da árvore AVL">
+            <p class="estado-vazio">Carregando árvore…</p>
+          </div>
+          <div id="tooltip-no" class="tooltip-no" hidden></div>
+        </div>
+      </section>
+
+      <!-- ---------- AUTOCOMPLETE EAD ---------- -->
+      <section id="secao-autocomplete" class="secao" aria-labelledby="titulo-autocomplete">
+        <h1 id="titulo-autocomplete">Autocomplete EAD</h1>
+        <p class="texto-explicativo">Digite como um aluno classificando uma dúvida no fórum.</p>
+
+        <div class="cartao">
+          <label for="campo-busca">Digite uma tag para classificar sua dúvida</label>
+          <div class="campo-busca">
+            <input type="text" id="campo-busca" placeholder="Ex.: Estrutura de Da..." autocomplete="off" aria-describedby="dica-busca">
+            <ul id="sugestoes" class="sugestoes" role="listbox"></ul>
+          </div>
+          <p id="dica-busca" class="dica">Busca por prefixo, sem diferenciar maiúsculas/minúsculas. Tags com menos de 2 caracteres não são aceitas (RN04).</p>
+          <div id="resultado-busca" class="resultado" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- ---------- INSERÇÃO / REMOÇÃO ---------- -->
+      <section id="secao-gerenciar" class="secao" aria-labelledby="titulo-gerenciar">
+        <h1 id="titulo-gerenciar">Inserção e remoção de tags</h1>
+
+        <div class="cartao">
+          <h2>Adicionar tag</h2>
+          <div class="formulario">
+            <label for="campo-tag">Nome da tag</label>
+            <input type="text" id="campo-tag" placeholder="Ex.: EstruturaDeDados">
+
+            <label for="campo-descricao">Descrição (opcional)</label>
+            <input type="text" id="campo-descricao" placeholder="Ex.: Conteúdos de listas, pilhas e árvores">
+
+            <button id="btn-adicionar" class="botao">+ Inserir tag</button>
+          </div>
+          <div id="aviso" class="aviso" role="status"></div>
+        </div>
+
+        <div class="cartao">
+          <div class="cabecalho-cartao">
+            <h2>Tags cadastradas</h2>
+          </div>
+          <div class="tabela-scroll">
+            <table class="tabela">
+              <thead>
+                <tr>
+                  <th>Tag</th>
+                  <th>Descrição</th>
+                  <th>Uso</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="corpo-tabela"></tbody>
+            </table>
+          </div>
+          <p class="dica">Uma tag só pode ser removida quando o contador de uso chega a zero (RN02). Use <strong>+</strong> / <strong>−</strong> para simular associação a tópicos.</p>
+        </div>
+      </section>
+
+      <!-- ---------- MÉTRICAS ---------- -->
+      <section id="secao-metricas" class="secao" aria-labelledby="titulo-metricas">
+        <h1 id="titulo-metricas">Métricas de desempenho</h1>
+
+        <div class="cartao">
+          <div class="metricas" id="metricas-completas"></div>
+        </div>
+
+        <div class="cartao">
+          <h2>Rotações por tipo</h2>
+          <p class="texto-explicativo">
+            A API atual expõe apenas o total acumulado de rotações, sem distinguir o tipo (LL, RR, LR, RL).
+          </p>
+          <div class="metricas metricas-nd">
+            <div class="metrica"><span>N/D</span><small>LL</small></div>
+            <div class="metrica"><span>N/D</span><small>RR</small></div>
+            <div class="metrica"><span>N/D</span><small>LR</small></div>
+            <div class="metrica"><span>N/D</span><small>RL</small></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- LOGS ---------- -->
+      <section id="secao-logs" class="secao" aria-labelledby="titulo-logs">
+        <h1 id="titulo-logs">Atividade recente</h1>
+        <div class="cartao">
+          <ul id="lista-logs" class="lista-logs" aria-live="polite"></ul>
+        </div>
+      </section>
+
+      <!-- ---------- CASOS DE USO ---------- -->
+      <section id="secao-casos-de-uso" class="secao" aria-labelledby="titulo-casos">
+        <h1 id="titulo-casos">Casos de uso</h1>
+
+        <div class="cartao">
+          <h2>Cenário obrigatório: aula1 → aula20</h2>
+          <p class="texto-explicativo">
+            Insere as tags "aula1" até "aula20" em ordem alfabética para demonstrar que a
+            árvore se rebalanceia e não degenera em uma lista encadeada.
+          </p>
+          <div class="botoes-linha">
+            <button id="btn-cenario" class="botao">Testar carga alfabética</button>
+            <button id="btn-limpar" class="botao perigo-suave">Limpar tudo</button>
+          </div>
+          <div id="resultado-cenario" class="resultado" aria-live="polite"></div>
+        </div>
+
+        <div class="cartao">
+          <h2>BST comum × Árvore AVL</h2>
+          <div class="comparacao">
+            <div class="comparacao-coluna">
+              <h3>BST comum</h3>
+              <p>Pode degenerar em uma lista encadeada quando os dados são inseridos em ordem (ex.: aula1, aula2, aula3…), fazendo a busca cair para O(n).</p>
+            </div>
+            <div class="comparacao-coluna comparacao-destaque">
+              <h3>Árvore AVL</h3>
+              <p>Após cada inserção ou remoção, verifica o fator de balanceamento de baixo para cima e aplica rotações quando necessário, mantendo a altura em O(log n).</p>
+            </div>
+          </div>
+          <div class="metricas">
+            <div class="metrica"><span>O(log n)</span><small>Busca (teórica)</small></div>
+            <div class="metrica"><span>O(log n)</span><small>Inserção (teórica)</small></div>
+            <div class="metrica"><span>O(log n)</span><small>Remoção (teórica)</small></div>
+          </div>
+          <p class="dica">Complexidade teórica do algoritmo — não é um benchmark medido em tempo real.</p>
+        </div>
+
+        <div class="cartao">
+          <h2>Fator de balanceamento</h2>
+          <p class="texto-explicativo">FB = altura(subárvore esquerda) − altura(subárvore direita). Uma AVL válida mantém FB ∈ {−1, 0, 1} em todos os nós.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ===================== PAINEL DIREITO ===================== -->
+    <aside class="painel-direito">
+      <div class="cartao">
+        <h2>Status</h2>
+        <div id="metricas-resumo" class="metricas metricas-compactas"></div>
       </div>
-      <table class="tabela">
-        <thead>
-          <tr>
-            <th>Tag</th>
-            <th>Descrição</th>
-            <th>Usos</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="corpo-tabela"></tbody>
-      </table>
-      <p class="dica">
-        Uma tag só pode ser removida quando o contador de uso chegar a zero (RN02).
-        Use os botões <strong>−</strong> para simular a exclusão de tópicos.
-      </p>
-    </section>
-
-    <!-- ===================== ÁREA ACADÊMICA / DEBUG (RF09 / RF10) ===================== -->
-    <section class="cartao debug">
-      <h2>Área acadêmica / debug</h2>
-
-      <div class="metricas">
-        <div class="metrica"><span id="m-altura">0</span><small>Altura da AVL</small></div>
-        <div class="metrica"><span id="m-nos">0</span><small>Nós</small></div>
-        <div class="metrica"><span id="m-rotacoes">0</span><small>Rotações</small></div>
-        <div class="metrica"><span id="m-balanceada">—</span><small>FB ∈ {-1,0,1}</small></div>
+      <div class="cartao">
+        <div class="cabecalho-cartao">
+          <h2>Atividade</h2>
+          <button class="link-secao" data-ir-para="logs">ver tudo</button>
+        </div>
+        <ul id="lista-logs-resumo" class="lista-logs lista-logs-compacta"></ul>
       </div>
+    </aside>
 
-      <h3>Estrutura da árvore</h3>
-      <p class="dica">Cada linha mostra: altura (h), fator de balanceamento (FB) e contador de uso.</p>
-      <pre id="arvore" class="arvore">(árvore vazia)</pre>
-    </section>
+  </div>
 
-  </main>
+  <!-- ===================== MODAL DE CONFIRMAÇÃO ===================== -->
+  <div id="modal-remover" class="modal-fundo" hidden>
+    <div class="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <h2 id="modal-titulo">Remover tag</h2>
+      <p id="modal-texto"></p>
+      <div class="botoes-linha">
+        <button id="modal-cancelar" class="botao secundario">Cancelar</button>
+        <button id="modal-confirmar" class="botao perigo-suave">Confirmar</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="rodape">
     Projeto acadêmico — Árvore AVL implementada manualmente em Python.
   </footer>
 
+  <script src="js/api.js"></script>
+  <script src="js/arvore.js"></script>
+  <script src="js/logs.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

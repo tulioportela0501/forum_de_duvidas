@@ -1,29 +1,48 @@
-/* =========================================================================
-   app.js — comunicação do frontend com a API Flask.
-   JavaScript puro, sem framework, conforme o escopo do MVP.
-   ========================================================================= */
+/* =============================================================================
+   app.js — orquestra a interface. Toda a comunicação com o backend passa
+   por API (api.js); todo o desenho da árvore passa por Visualizador
+   (arvore.js); todo o histórico passa por Logs (logs.js).
+   ========================================================================== */
 
-const API = "/api";
+// ---------------- Referências ----------------
+const btnMenu = document.getElementById("btn-menu");
+const sidebar = document.getElementById("sidebar");
+const itensNav = document.querySelectorAll(".item-nav");
+const secoes = document.querySelectorAll(".secao");
 
-// Referências dos elementos da página.
+const statusApiEl = document.getElementById("status-api");
+const statusBalanceamentoEl = document.getElementById("status-balanceamento");
+
 const campoBusca = document.getElementById("campo-busca");
 const listaSugestoes = document.getElementById("sugestoes");
 const resultadoBusca = document.getElementById("resultado-busca");
+
 const campoTag = document.getElementById("campo-tag");
 const campoDescricao = document.getElementById("campo-descricao");
 const btnAdicionar = document.getElementById("btn-adicionar");
 const aviso = document.getElementById("aviso");
 const corpoTabela = document.getElementById("corpo-tabela");
-const arvoreEl = document.getElementById("arvore");
+
 const btnCenario = document.getElementById("btn-cenario");
 const btnLimpar = document.getElementById("btn-limpar");
+const resultadoCenario = document.getElementById("resultado-cenario");
 
-/* -------------------------------------------------------------------------
-   DEBOUNCE
-   Evita disparar uma requisição a cada tecla digitada. A função só é
-   executada depois que o usuário para de digitar pelo tempo definido.
-   Sem isso, digitar "estrutura" geraria 9 requisições em sequência.
-   ------------------------------------------------------------------------- */
+const containerSvg = document.getElementById("container-svg");
+const tooltipNo = document.getElementById("tooltip-no");
+const avisoRotacao = document.getElementById("aviso-rotacao");
+
+const modalRemover = document.getElementById("modal-remover");
+const modalTexto = document.getElementById("modal-texto");
+const modalCancelar = document.getElementById("modal-cancelar");
+const modalConfirmar = document.getElementById("modal-confirmar");
+
+let ultimasMetricas = null;
+let tagPendenteRemocao = null;
+
+Visualizador.iniciar(containerSvg, tooltipNo);
+Logs.iniciar(document.getElementById("lista-logs"), document.getElementById("lista-logs-resumo"));
+
+// ---------------- Utilitários ----------------
 function debounce(fn, atraso) {
   let timer = null;
   return function (...args) {
@@ -32,74 +51,140 @@ function debounce(fn, atraso) {
   };
 }
 
-// Mostra uma mensagem na área de aviso do formulário.
+function escaparHtml(texto) {
+  return String(texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function mostrarAviso(texto, tipo) {
   aviso.textContent = texto;
   aviso.className = "aviso " + (tipo || "");
 }
 
-/* -------------------------------------------------------------------------
-   RF05 — AUTOCOMPLETAÇÃO
-   Consulta /api/tags/search?q= e monta a lista de sugestões.
-   ------------------------------------------------------------------------- */
-async function buscarSugestoes(prefixo) {
-  if (!prefixo.trim()) {
+function definirIndicador(el, estado, textoExtra) {
+  el.classList.remove("ok", "erro", "alerta");
+  if (estado) el.classList.add(estado);
+  if (textoExtra !== undefined) {
+    el.innerHTML = `<span class="ponto"></span> <span>${textoExtra}</span>`;
+  }
+}
+
+// ---------------- Navegação (sidebar / seções) ----------------
+function navegarPara(idSecao) {
+  secoes.forEach((s) => s.classList.toggle("ativa", s.id === `secao-${idSecao}`));
+  itensNav.forEach((item) => {
+    const ativo = item.dataset.secao === idSecao;
+    item.classList.toggle("ativo", ativo);
+    if (ativo) item.setAttribute("aria-current", "page"); else item.removeAttribute("aria-current");
+  });
+  fecharSidebarMobile();
+}
+
+itensNav.forEach((item) => item.addEventListener("click", () => navegarPara(item.dataset.secao)));
+
+document.querySelectorAll("[data-ir-para]").forEach((el) =>
+  el.addEventListener("click", () => navegarPara(el.dataset.irPara))
+);
+
+function fecharSidebarMobile() {
+  sidebar.classList.remove("aberta");
+  btnMenu.setAttribute("aria-expanded", "false");
+}
+
+btnMenu.addEventListener("click", () => {
+  const aberta = sidebar.classList.toggle("aberta");
+  btnMenu.setAttribute("aria-expanded", String(aberta));
+});
+
+// ---------------- RF05 — Autocompletação ----------------
+function destacarPrefixo(tag, prefixo) {
+  const indice = tag.toLowerCase().indexOf(prefixo.toLowerCase());
+  if (indice === -1) return escaparHtml(tag);
+  const antes = escaparHtml(tag.slice(0, indice));
+  const meio = escaparHtml(tag.slice(indice, indice + prefixo.length));
+  const depois = escaparHtml(tag.slice(indice + prefixo.length));
+  return `${antes}<mark>${meio}</mark>${depois}`;
+}
+
+async function buscarSugestoes(prefixoBruto) {
+  const prefixo = prefixoBruto.trim();
+
+  if (prefixo.length === 0) {
     listaSugestoes.classList.remove("visivel");
     listaSugestoes.innerHTML = "";
     return;
   }
-
-  try {
-    const resp = await fetch(`${API}/tags/search?q=${encodeURIComponent(prefixo)}&limit=10`);
-    const dados = await resp.json();
-    renderizarSugestoes(dados.suggestions);
-  } catch (erro) {
-    console.error("Falha na busca por prefixo:", erro);
+  if (prefixo.length < 2) {
+    listaSugestoes.innerHTML = `<li class="sem-resultado">Digite pelo menos 2 caracteres (RN04).</li>`;
+    listaSugestoes.classList.add("visivel");
+    return;
   }
+
+  listaSugestoes.innerHTML = `<li class="sem-resultado">Buscando…</li>`;
+  listaSugestoes.classList.add("visivel");
+
+  const { ok, dados } = await API.buscarSugestoes(prefixo, 10);
+  if (!ok || !dados) {
+    listaSugestoes.innerHTML = `<li class="sem-resultado">Não foi possível consultar a API.</li>`;
+    return;
+  }
+
+  renderizarSugestoes(dados.suggestions, prefixo);
 }
 
-function renderizarSugestoes(sugestoes) {
+function renderizarSugestoes(sugestoes, prefixo) {
   listaSugestoes.innerHTML = "";
 
   if (!sugestoes || sugestoes.length === 0) {
-    listaSugestoes.classList.remove("visivel");
+    listaSugestoes.innerHTML = `<li class="sem-resultado">Nenhuma tag encontrada com esse prefixo.</li>`;
     return;
   }
 
   sugestoes.forEach((item) => {
     const li = document.createElement("li");
-    li.innerHTML =
-      `${escaparHtml(item.tag)}<span class="contador">${item.usage_count} uso(s)</span>`;
-    // Ao clicar na sugestão, preenchemos o campo e mostramos a busca exata.
-    li.addEventListener("click", () => {
-      campoBusca.value = item.tag;
-      listaSugestoes.classList.remove("visivel");
-      buscaExata(item.tag);
-    });
+    li.setAttribute("role", "option");
+    li.tabIndex = 0;
+    li.innerHTML = `${destacarPrefixo(item.tag, prefixo)}<span class="contador">${item.usage_count} uso(s)</span>`;
+    li.addEventListener("click", () => selecionarSugestao(item.tag));
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter") selecionarSugestao(item.tag); });
     listaSugestoes.appendChild(li);
   });
-
-  listaSugestoes.classList.add("visivel");
 }
 
-/* -------------------------------------------------------------------------
-   RF04 — BUSCA EXATA
-   ------------------------------------------------------------------------- */
+function selecionarSugestao(tag) {
+  campoBusca.value = tag;
+  listaSugestoes.classList.remove("visivel");
+  buscaExata(tag);
+  Logs.registrar("info", `Sugestão "${escaparHtml(tag)}" selecionada.`);
+}
+
 async function buscaExata(tag) {
-  const resp = await fetch(`${API}/tags/${encodeURIComponent(tag)}`);
-  if (resp.ok) {
-    const dados = await resp.json();
-    resultadoBusca.innerHTML =
-      `Encontrada: <strong>${escaparHtml(dados.tag.tag)}</strong> — ` +
-      `${dados.tag.usage_count} uso(s).`;
+  if (!tag) return;
+  const { ok, dados } = await API.buscarTag(tag);
+  if (ok && dados && dados.tag) {
+    resultadoBusca.innerHTML = `Encontrada: <strong>${escaparHtml(dados.tag.tag)}</strong> — ${dados.tag.usage_count} uso(s).`;
+    Logs.registrar("ok", `Tag "${escaparHtml(dados.tag.tag)}" encontrada.`);
   } else {
     resultadoBusca.textContent = "Tag não encontrada.";
+    Logs.registrar("erro", `Busca por "${escaparHtml(tag)}" não encontrou resultado.`);
   }
 }
 
-/* -------------------------------------------------------------------------
-   RF01 — CADASTRO DE TAG
-   ------------------------------------------------------------------------- */
+campoBusca.addEventListener("input", debounce((e) => buscarSugestoes(e.target.value), 250));
+campoBusca.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    listaSugestoes.classList.remove("visivel");
+    buscaExata(campoBusca.value.trim());
+  }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".campo-busca")) listaSugestoes.classList.remove("visivel");
+});
+
+// ---------------- RF01 / RF08 — Inserção de tag ----------------
 async function adicionarTag() {
   const tag = campoTag.value.trim();
   const descricao = campoDescricao.value.trim();
@@ -109,28 +194,21 @@ async function adicionarTag() {
     return;
   }
 
-  const resp = await fetch(`${API}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag: tag, description: descricao }),
-  });
+  const { ok, dados } = await API.inserirTag(tag, descricao);
 
-  const dados = await resp.json();
-
-  if (!resp.ok) {
-    // Aqui aparecem as violações de regra de negócio (ex.: RN04).
-    mostrarAviso(dados.error, "erro");
+  if (!ok || !dados) {
+    const mensagem = (dados && dados.error) || "Não foi possível inserir a tag.";
+    mostrarAviso(mensagem, "erro");
+    Logs.registrar("erro", escaparHtml(mensagem));
     return;
   }
 
   if (dados.created) {
-    mostrarAviso(`Tag "${dados.tag.tag}" criada.`, "ok");
+    mostrarAviso(`✓ Tag "${dados.tag.tag}" inserida.`, "ok");
+    Logs.registrar("ok", `Tag "${escaparHtml(dados.tag.tag)}" inserida.`);
   } else {
-    // RF08: tag duplicada não cria nó novo, apenas incrementa o contador.
-    mostrarAviso(
-      `A tag "${dados.tag.tag}" já existia — contador incrementado para ${dados.tag.usage_count}.`,
-      "info"
-    );
+    mostrarAviso(`ℹ Tag "${dados.tag.tag}" já existente — contador atualizado para ${dados.tag.usage_count}.`, "info");
+    Logs.registrar("info", `Tag "${escaparHtml(dados.tag.tag)}" já existia — uso incrementado.`);
   }
 
   campoTag.value = "";
@@ -138,18 +216,18 @@ async function adicionarTag() {
   await atualizarTudo();
 }
 
-/* -------------------------------------------------------------------------
-   RF06 / RF07 — LISTAGEM E AÇÕES
-   ------------------------------------------------------------------------- */
+btnAdicionar.addEventListener("click", adicionarTag);
+campoTag.addEventListener("keydown", (e) => { if (e.key === "Enter") adicionarTag(); });
+
+// ---------------- RF06 / RF07 / RF03 — Tabela de tags ----------------
 async function carregarTags() {
-  const resp = await fetch(`${API}/tags`);
-  const dados = await resp.json();
+  const { ok, dados } = await API.listarTags();
+  if (!ok || !dados) return;
 
   corpoTabela.innerHTML = "";
 
-  if (dados.tags.length === 0) {
-    corpoTabela.innerHTML =
-      '<tr><td colspan="4" style="color:#98a3ba">Nenhuma tag cadastrada ainda.</td></tr>';
+  if (!dados.tags || dados.tags.length === 0) {
+    corpoTabela.innerHTML = `<tr><td colspan="4" style="color:var(--text-soft)">Nenhuma tag cadastrada ainda.</td></tr>`;
     return;
   }
 
@@ -160,102 +238,149 @@ async function carregarTags() {
       <td>${escaparHtml(item.description || "—")}</td>
       <td>${item.usage_count}</td>
       <td class="acoes">
-        <button data-acao="use"    data-tag="${escaparHtml(item.tag)}" title="Associar a um novo tópico">+</button>
-        <button data-acao="unuse"  data-tag="${escaparHtml(item.tag)}" title="Remover associação de um tópico">−</button>
+        <button data-acao="use" data-tag="${escaparHtml(item.tag)}" title="Associar a um novo tópico">+</button>
+        <button data-acao="unuse" data-tag="${escaparHtml(item.tag)}" title="Remover associação de um tópico">−</button>
         <button data-acao="delete" data-tag="${escaparHtml(item.tag)}" class="remover" title="Excluir tag">excluir</button>
       </td>`;
     corpoTabela.appendChild(tr);
   });
 }
 
-// Delegação de evento: um único listener para todos os botões da tabela.
 corpoTabela.addEventListener("click", async (evento) => {
   const botao = evento.target.closest("button");
   if (!botao) return;
-
   const { acao, tag } = botao.dataset;
 
   if (acao === "delete") {
-    const resp = await fetch(`${API}/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
-    const dados = await resp.json();
-    // Se a RN02 bloquear a remoção, a mensagem do backend aparece aqui.
-    mostrarAviso(resp.ok ? `Tag "${tag}" removida.` : dados.error, resp.ok ? "ok" : "erro");
-  } else {
-    await fetch(`${API}/tags/${encodeURIComponent(tag)}/${acao}`, { method: "POST" });
-    mostrarAviso("", "");
+    abrirModalRemocao(tag);
+    return;
   }
 
+  const { ok } = acao === "use" ? await API.usarTag(tag) : await API.desusarTag(tag);
+  Logs.registrar(ok ? "ok" : "erro", ok
+    ? `Uso da tag "${escaparHtml(tag)}" ${acao === "use" ? "incrementado" : "decrementado"}.`
+    : `Falha ao atualizar uso de "${escaparHtml(tag)}".`);
   await atualizarTudo();
 });
 
-/* -------------------------------------------------------------------------
-   RF09 / RF10 — ÁREA ACADÊMICA
-   ------------------------------------------------------------------------- */
-async function carregarDebug() {
-  const [respMetricas, respArvore] = await Promise.all([
-    fetch(`${API}/metrics`),
-    fetch(`${API}/avl`),
-  ]);
-
-  const metricas = await respMetricas.json();
-  const arvore = await respArvore.json();
-
-  document.getElementById("m-altura").textContent = metricas.height;
-  document.getElementById("m-nos").textContent = metricas.node_count;
-  document.getElementById("m-rotacoes").textContent = metricas.rotations;
-  document.getElementById("m-balanceada").textContent = metricas.is_balanced ? "OK" : "FALHA";
-
-  arvoreEl.textContent = arvore.text;
+function abrirModalRemocao(tag) {
+  tagPendenteRemocao = tag;
+  modalTexto.textContent = `Remover a tag "${tag}"? Isso só é permitido quando o contador de uso está zerado (RN02).`;
+  modalRemover.hidden = false;
+  modalConfirmar.focus();
 }
 
-// Recarrega listagem e área de debug de uma vez só.
-async function atualizarTudo() {
-  await Promise.all([carregarTags(), carregarDebug()]);
+function fecharModalRemocao() {
+  modalRemover.hidden = true;
+  tagPendenteRemocao = null;
 }
 
-// Evita injeção de HTML ao exibir valores vindos da API.
-function escaparHtml(texto) {
-  return String(texto)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+modalCancelar.addEventListener("click", fecharModalRemocao);
+modalRemover.addEventListener("click", (e) => { if (e.target === modalRemover) fecharModalRemocao(); });
 
-/* -------------------------------------------------------------------------
-   EVENTOS
-   ------------------------------------------------------------------------- */
-// Debounce de 250 ms: rápido o suficiente para parecer instantâneo e
-// econômico o suficiente para não inundar o backend.
-campoBusca.addEventListener("input", debounce((e) => buscarSugestoes(e.target.value), 250));
+modalConfirmar.addEventListener("click", async () => {
+  const tag = tagPendenteRemocao;
+  fecharModalRemocao();
+  if (!tag) return;
 
-campoBusca.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    listaSugestoes.classList.remove("visivel");
-    buscaExata(campoBusca.value.trim());
+  const { ok, dados } = await API.removerTag(tag);
+  if (ok) {
+    mostrarAviso(`Tag "${tag}" removida.`, "ok");
+    Logs.registrar("ok", `Tag "${escaparHtml(tag)}" removida.`);
+  } else {
+    const mensagem = (dados && dados.error) || `Não foi possível remover "${tag}".`;
+    mostrarAviso(mensagem, "erro");
+    Logs.registrar("erro", escaparHtml(mensagem));
   }
+  await atualizarTudo();
 });
 
-// Fecha a lista de sugestões ao clicar fora dela.
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".campo-busca")) listaSugestoes.classList.remove("visivel");
-});
+// ---------------- RF09 / RF10 — Métricas e árvore ----------------
+function cartaoMetrica(valor, rotulo) {
+  return `<div class="metrica"><span>${valor}</span><small>${rotulo}</small></div>`;
+}
 
-btnAdicionar.addEventListener("click", adicionarTag);
-campoTag.addEventListener("keydown", (e) => { if (e.key === "Enter") adicionarTag(); });
+function renderizarMetricas(metricas) {
+  const balanceadaTexto = metricas.is_balanced ? "OK" : "FALHA";
 
+  document.getElementById("metricas-completas").innerHTML = [
+    cartaoMetrica(metricas.height, "Altura da AVL"),
+    cartaoMetrica(metricas.node_count, "Nós"),
+    cartaoMetrica(metricas.rotations, "Rotações (total)"),
+    cartaoMetrica(balanceadaTexto, "Balanceamento"),
+    cartaoMetrica(metricas.total_usage ?? "N/D", "Uso total"),
+  ].join("");
+
+  document.getElementById("metricas-resumo").innerHTML = [
+    cartaoMetrica(metricas.height, "Altura"),
+    cartaoMetrica(metricas.node_count, "Nós"),
+    cartaoMetrica(balanceadaTexto, "Balanceada"),
+  ].join("");
+
+  document.getElementById("mini-metricas").innerHTML = [
+    cartaoMetrica(metricas.height, "Altura"),
+    cartaoMetrica(metricas.node_count, "Nós"),
+    cartaoMetrica(metricas.rotations, "Rotações"),
+    cartaoMetrica(balanceadaTexto, "Balanceamento"),
+  ].join("");
+
+  definirIndicador(statusBalanceamentoEl, metricas.is_balanced ? "ok" : "erro",
+    metricas.is_balanced ? "AVL balanceada" : "AVL desbalanceada");
+
+  if (ultimasMetricas && metricas.rotations > ultimasMetricas.rotations) {
+    const diferenca = metricas.rotations - ultimasMetricas.rotations;
+    avisoRotacao.hidden = false;
+    avisoRotacao.textContent = `↻ ${diferenca} rotação(ões) detectada(s) — total agora: ${metricas.rotations}`;
+    Logs.registrar("info", `Rotação executada pelo backend (total acumulado: ${metricas.rotations}).`);
+    setTimeout(() => { avisoRotacao.hidden = true; }, 6000);
+  }
+
+  ultimasMetricas = metricas;
+}
+
+async function atualizarArvoreEMetricas() {
+  const [respMetricas, respArvore] = await Promise.all([API.metricas(), API.arvore()]);
+
+  if (respMetricas.ok && respMetricas.dados) {
+    definirIndicador(statusApiEl, "ok", "API conectada");
+    renderizarMetricas(respMetricas.dados);
+  } else {
+    definirIndicador(statusApiEl, "erro", "API indisponível");
+  }
+
+  if (respArvore.ok && respArvore.dados) {
+    Visualizador.renderizar(respArvore.dados);
+  }
+}
+
+async function atualizarTudo() {
+  await Promise.all([carregarTags(), atualizarArvoreEMetricas()]);
+}
+
+// ---------------- Casos de uso: cenário aula1..aula20 e reset ----------------
 btnCenario.addEventListener("click", async () => {
-  // Carrega o cenário obrigatório do levantamento (aula1..aula20).
-  await fetch(`${API}/seed`, { method: "POST" });
-  mostrarAviso("Cenário aula1..aula20 carregado. Veja a altura na área de debug.", "info");
+  btnCenario.disabled = true;
+  resultadoCenario.textContent = "Carregando cenário aula1..aula20…";
+  const { ok, dados } = await API.carregarCenario();
+  btnCenario.disabled = false;
+
+  if (ok) {
+    resultadoCenario.textContent = "Cenário carregado. Veja a altura e o balanceamento no painel de Métricas.";
+    Logs.registrar("ok", "Cenário aula1..aula20 carregado.");
+  } else {
+    resultadoCenario.textContent = (dados && dados.error) || "Não foi possível carregar o cenário.";
+    Logs.registrar("erro", "Falha ao carregar o cenário aula1..aula20.");
+  }
   await atualizarTudo();
 });
 
 btnLimpar.addEventListener("click", async () => {
-  await fetch(`${API}/reset`, { method: "POST" });
-  mostrarAviso("Dicionário limpo.", "info");
+  const { ok } = await API.reiniciar();
+  Visualizador.limparEstadoConhecido();
+  resultadoCenario.textContent = ok ? "Dicionário limpo." : "Não foi possível limpar o dicionário.";
+  Logs.registrar(ok ? "info" : "erro", ok ? "Dicionário de tags reiniciado." : "Falha ao reiniciar o dicionário.");
   await atualizarTudo();
 });
 
-// Carga inicial da página.
+// ---------------- Carga inicial ----------------
 atualizarTudo();
