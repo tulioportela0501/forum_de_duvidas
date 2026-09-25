@@ -1,0 +1,12 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acesso administrativo</title><link rel="stylesheet" href="css/style.css"></head>
+<body style="display:grid;place-items:center;min-height:100vh"><div class="card" style="width:min(420px,94%)"><div class="logo"><i></i>Fórum AVL · Admin</div>
+<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn" id="a">Entrar</button><button class="btn ghost" id="b">Cadastrar (código de acesso)</button></div>
+<input id="nome" placeholder="Nome" style="display:none"><input id="email" type="email" placeholder="E-mail"><input id="senha" type="password" placeholder="Senha (mín. 10 caracteres)">
+<input id="cod" placeholder="Código de acesso administrativo" style="display:none"><button class="btn" id="go" style="width:100%">Entrar</button><p class="mut" id="msg"></p><a href="index.html">← Voltar</a></div>
+<script src="js/api.js"></script><script>let reg=false;const $=s=>document.getElementById(s);
+function mode(r){reg=r;$('nome').style.display=$('cod').style.display=r?'block':'none';$('go').textContent=r?'Criar conta de administrador':'Entrar'}
+$('a').onclick=()=>mode(false);$('b').onclick=()=>mode(true);
+$('go').onclick=async()=>{$('go').disabled=true;$('msg').textContent='';try{
+ const b={email:$('email').value,senha:$('senha').value};if(reg){b.nome=$('nome').value;b.codigo=$('cod').value}
+ const d=await post(reg?EP.adminRegistro:EP.adminLogin,b);localStorage.setItem('admin_token',d.token);location.href='index.html#/admin'}
+ catch(e){$('msg').style.color='#fca5a5';$('msg').textContent=e.message}$('go').disabled=false}</script></body></html>

@@ -1,70 +1,16 @@
-/* =============================================================================
-   api.js — única camada que fala com a API Flask.
-   Mantém exatamente os endpoints e o formato de dados já usados pelo
-   app.js original. Nenhuma rota nova foi inventada aqui.
-   ========================================================================== */
-
-const API = (() => {
-  const BASE = "/api";
-
-  async function requisicao(caminho, opcoes) {
-    const resp = await fetch(`${BASE}${caminho}`, opcoes);
-    let dados = null;
-    try {
-      dados = await resp.json();
-    } catch (erro) {
-      dados = null;
-    }
-    return { ok: resp.ok, status: resp.status, dados };
-  }
-
-  return {
-    // RF05 — autocompletação por prefixo.
-    buscarSugestoes(prefixo, limite = 10) {
-      return requisicao(`/tags/search?q=${encodeURIComponent(prefixo)}&limit=${limite}`);
-    },
-    // RF04 — busca exata.
-    buscarTag(tag) {
-      return requisicao(`/tags/${encodeURIComponent(tag)}`);
-    },
-    // RF06 — listagem completa (in-order).
-    listarTags() {
-      return requisicao(`/tags`);
-    },
-    // RF01 / RF08 — inserção (cria ou incrementa uso).
-    inserirTag(tag, descricao) {
-      return requisicao(`/tags`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tag, description: descricao }),
-      });
-    },
-    // RF03 — remoção (bloqueada pela RN02 quando uso > 0).
-    removerTag(tag) {
-      return requisicao(`/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
-    },
-    // RF07 — associação/desassociação de tópicos.
-    usarTag(tag) {
-      return requisicao(`/tags/${encodeURIComponent(tag)}/use`, { method: "POST" });
-    },
-    desusarTag(tag) {
-      return requisicao(`/tags/${encodeURIComponent(tag)}/unuse`, { method: "POST" });
-    },
-    // RF10 — métricas agregadas da árvore.
-    metricas() {
-      return requisicao(`/metrics`);
-    },
-    // RF09 — estrutura da árvore para a área acadêmica/visualizador.
-    arvore() {
-      return requisicao(`/avl`);
-    },
-    // Cenário obrigatório aula1..aula20.
-    carregarCenario() {
-      return requisicao(`/seed`, { method: "POST" });
-    },
-    // Limpa o dicionário para recomeçar a demonstração.
-    reiniciar() {
-      return requisicao(`/reset`, { method: "POST" });
-    },
-  };
-})();
+// ⚠ ÚNICO lugar para ajustar as rotas do seu backend Flask (routes.py). Os caminhos abaixo são SUPOSIÇÕES.
+const API_BASE = window.API_BASE || '';
+const EP = {topicos:'/api/topicos',tags:'/api/tags',membros:'/api/membros',avl:'/api/avl',rotacoes:'/api/avl/rotacoes',logs:'/api/logs',teste:'/api/avl/teste',
+  adminLogin:'/api/admin/login',adminRegistro:'/api/admin/registro'};
+async function req(path,opt={}){const t=localStorage.getItem('admin_token');
+  const r=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},...opt});
+  let d=null;try{d=await r.json()}catch{}
+  if(!r.ok)throw new Error((d&&(d.erro||d.error||d.message))||'Erro HTTP '+r.status);return d}
+const post=(p,b)=>req(p,{method:'POST',body:JSON.stringify(b||{})});
+const lista=d=>Array.isArray(d)?d:(d&&(d.items||d.data||d.tags||d.topicos||d.membros||d.logs))||[];
+const pick=(o,...k)=>{for(const x of k)if(o&&o[x]!=null)return o[x];return null};
+function normNode(n){if(!n)return null;return{tag:pick(n,'display_name','tag','key'),key:pick(n,'key','tag'),h:pick(n,'height','altura'),uso:pick(n,'usage_count','uso','contador_uso'),
+  desc:pick(n,'description','descricao'),l:normNode(pick(n,'left','esquerda','ponteiroEsquerda')),r:normNode(pick(n,'right','direita','ponteiroDireita'))}}
+const treeRoot=d=>normNode(d&&(d.root||d.raiz||d.tree||d.arvore||(d.key||d.tag?d:null)));
+const H=n=>n?(n.h??1+Math.max(H(n.l),H(n.r))):0; // usa a altura do backend; só recalcula se ela não vier
+const FB=n=>n?H(n.l)-H(n.r):null;
