@@ -1,12 +1,58 @@
-<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acesso administrativo</title><link rel="stylesheet" href="css/style.css"></head>
-<body style="display:grid;place-items:center;min-height:100vh"><div class="card" style="width:min(420px,94%)"><div class="logo"><i></i>Fórum AVL · Admin</div>
-<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn" id="a">Entrar</button><button class="btn ghost" id="b">Cadastrar (código de acesso)</button></div>
-<input id="nome" placeholder="Nome" style="display:none"><input id="email" type="email" placeholder="E-mail"><input id="senha" type="password" placeholder="Senha (mín. 10 caracteres)">
-<input id="cod" placeholder="Código de acesso administrativo" style="display:none"><button class="btn" id="go" style="width:100%">Entrar</button><p class="mut" id="msg"></p><a href="index.html">← Voltar</a></div>
-<script src="js/api.js"></script><script>let reg=false;const $=s=>document.getElementById(s);
-function mode(r){reg=r;$('nome').style.display=$('cod').style.display=r?'block':'none';$('go').textContent=r?'Criar conta de administrador':'Entrar'}
-$('a').onclick=()=>mode(false);$('b').onclick=()=>mode(true);
-$('go').onclick=async()=>{$('go').disabled=true;$('msg').textContent='';try{
- const b={email:$('email').value,senha:$('senha').value};if(reg){b.nome=$('nome').value;b.codigo=$('cod').value}
- const d=await post(reg?EP.adminRegistro:EP.adminLogin,b);localStorage.setItem('admin_token',d.token);location.href='index.html#/admin'}
- catch(e){$('msg').style.color='#fca5a5';$('msg').textContent=e.message}$('go').disabled=false}</script></body></html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Acesso administrativo — Fórum AVL</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body style="display:grid;place-items:center;min-height:100vh">
+  <div class="card" style="width:min(420px,94%)">
+    <div class="logo"><i></i>Fórum AVL · Admin</div>
+    <div class="btnrow" style="justify-content:flex-start;margin-bottom:12px">
+      <button class="btn" id="a" type="button">Entrar</button>
+      <button class="btn ghost" id="b" type="button">Cadastrar (código de acesso)</button>
+    </div>
+    <input id="nome" placeholder="Nome" autocomplete="name" style="display:none">
+    <input id="email" type="email" placeholder="E-mail" autocomplete="email">
+    <input id="senha" type="password" placeholder="Senha (mín. 10 caracteres)" autocomplete="current-password">
+    <input id="cod" placeholder="Código de acesso administrativo" autocomplete="off" style="display:none">
+    <button class="btn" id="go" type="button" style="width:100%">Entrar</button>
+    <p class="mut" id="msg" role="alert" style="min-height:18px"></p>
+    <a href="index.html">← Voltar</a>
+  </div>
+  <script src="js/api.js"></script>
+  <script>
+    let reg = false;
+    const el = id => document.getElementById(id);
+    function modo(r) {
+      reg = r;
+      el('nome').style.display = el('cod').style.display = r ? 'block' : 'none';
+      el('senha').autocomplete = r ? 'new-password' : 'current-password';
+      el('go').textContent = r ? 'Criar conta de administrador' : 'Entrar';
+      el('a').className = r ? 'btn ghost' : 'btn';
+      el('b').className = r ? 'btn' : 'btn ghost';
+      el('msg').textContent = '';
+    }
+    async function enviar() {
+      const go = el('go'), msg = el('msg');
+      go.disabled = true; msg.textContent = '';
+      try {
+        const corpo = { email: el('email').value, senha: el('senha').value };
+        if (reg) { corpo.nome = el('nome').value; corpo.codigo = el('cod').value; }
+        const d = await post(reg ? EP.adminRegistro : EP.adminLogin, corpo);
+        Auth.set(d.token);
+        location.href = 'index.html#/admin';
+      } catch (e) {
+        msg.style.color = '#fca5a5';
+        msg.textContent = e.message;
+      }
+      go.disabled = false;
+    }
+    el('a').onclick = () => modo(false);
+    el('b').onclick = () => modo(true);
+    el('go').onclick = enviar;
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
+  </script>
+</body>
+</html>
