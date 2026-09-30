@@ -1,0 +1,9 @@
+{
+  // Go Live serve só a pasta do frontend: http://127.0.0.1:5500/
+  "liveServer.settings.root": "/frontend",
+  "liveServer.settings.port": 5500,
+  // Sem isso, cada gravação do banco em backend/data recarregaria a página sozinha (e cortaria a animação da AVL).
+  "liveServer.settings.ignoreFiles": [".vscode/**", "backend/**", "**/*.db", "**/*.db-journal", "**/*.py", "**/*.sass", "**/*.scss", "**/*.ts"],
+  "files.exclude": { "**/__pycache__": true, "**/.pytest_cache": true },
+  "python.terminal.activateEnvironment": true
+}
