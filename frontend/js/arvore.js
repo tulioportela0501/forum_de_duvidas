@@ -1,185 +1,44 @@
-/* =============================================================================
-   arvore.js — desenha a árvore AVL em SVG a partir da estrutura já retornada
-   pela API (GET /api/avl). Este arquivo apenas VISUALIZA a árvore: nenhuma
-   regra de inserção, remoção ou rotação é recalculada aqui — quem decide
-   isso é sempre o backend (avl_tree.py).
-
-   A API atual devolve um texto indentado (campo "text"). Se em algum momento
-   ela também expuser a estrutura aninhada (campo "tree", no formato de
-   AVLTree.to_dict()), este arquivo desenha o SVG interativo automaticamente;
-   caso contrário, cai de volta para o texto, sem inventar dados.
-   ========================================================================== */
-
-const Visualizador = (() => {
-  const ESPACAMENTO_X = 78;
-  const ESPACAMENTO_Y = 92;
-  const MARGEM = 46;
-  const RAIO = 24;
-
-  let container = null;
-  let tooltip = null;
-  let chavesConhecidas = new Set();
-
-  function iniciar(containerEl, tooltipEl) {
-    container = containerEl;
-    tooltip = tooltipEl;
-  }
-
-  // Detecta se a API já expõe a estrutura aninhada da árvore.
-  function extrairEstrutura(respostaAvl) {
-    if (!respostaAvl) return null;
-    return respostaAvl.tree || respostaAvl.root || respostaAvl.node || null;
-  }
-
-  function coletarPosicoes(node, profundidade, mapa, contador) {
-    if (!node) return;
-    coletarPosicoes(node.left, profundidade + 1, mapa, contador);
-    const x = contador.valor++;
-    mapa.set(node, { x, y: profundidade, node });
-    coletarPosicoes(node.right, profundidade + 1, mapa, contador);
-  }
-
-  function coletarArestas(node, mapa, arestas) {
-    if (!node) return;
-    const pos = mapa.get(node);
-    if (node.left) {
-      arestas.push({ pai: pos, filho: mapa.get(node.left) });
-      coletarArestas(node.left, mapa, arestas);
-    }
-    if (node.right) {
-      arestas.push({ pai: pos, filho: mapa.get(node.right) });
-      coletarArestas(node.right, mapa, arestas);
-    }
-  }
-
-  function chaveSegura(chave) {
-    return String(chave).replace(/[^a-zA-Z0-9_-]/g, "_");
-  }
-
-  function renderizarSvg(raiz) {
-    const mapa = new Map();
-    coletarPosicoes(raiz, 0, mapa, { valor: 0 });
-    const arestas = [];
-    coletarArestas(raiz, mapa, arestas);
-
-    const posicoes = [...mapa.values()];
-    const maxX = Math.max(...posicoes.map((p) => p.x));
-    const maxY = Math.max(...posicoes.map((p) => p.y));
-    const largura = (maxX + 1) * ESPACAMENTO_X + MARGEM * 2;
-    const altura = (maxY + 1) * ESPACAMENTO_Y + MARGEM * 2;
-
-    const px = (p) => p.x * ESPACAMENTO_X + MARGEM + ESPACAMENTO_X / 2;
-    const py = (p) => p.y * ESPACAMENTO_Y + MARGEM;
-
-    let svg = `<svg viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg">`;
-
-    arestas.forEach(({ pai, filho }) => {
-      svg += `<line class="aresta-avl" data-de="${chaveSegura(pai.node.key)}" data-para="${chaveSegura(filho.node.key)}"
-        x1="${px(pai)}" y1="${py(pai)}" x2="${px(filho)}" y2="${py(filho)}" />`;
+// Visualizador: apenas DESENHA a árvore enviada pelo backend (a AVL real está em backend/avl.py).
+// opts: {onSel(no), destaque: 'chave', rotacionados: ['nome', ...], animar: bool}
+function desenharArvore(root, box, opts = {}) {
+  if (!root) { box.innerHTML = '<div class="empty">Árvore vazia. Publique dúvidas com tags ou crie tags para vê-las aqui.</div>'; return []; }
+  const W = 116, V = 92, pos = [];
+  let i = 0;
+  (function walk(n, d) { if (!n) return; walk(n.l, d + 1); n.x = i++ * W + 62; n.y = d * V + 40; n.d = d; pos.push(n); walk(n.r, d + 1); })(root, 0);
+  const w = i * W + 20, h = (Math.max(...pos.map(p => p.d)) + 1) * V + 30;
+  const rot = new Set(opts.rotacionados || []);
+  let edges = '', nodes = '';
+  pos.forEach((n, idx) => {
+    [n.l, n.r].forEach(c => {
+      if (c) {
+        const y1 = n.y + 33, y2 = c.y - 25, my = (y1 + y2) / 2;
+        edges += `<path class="edge" pathLength="100" d="M${n.x} ${y1}C${n.x} ${my},${c.x} ${my},${c.x} ${y2}"/>`;
+      }
     });
-
-    posicoes.forEach((pos) => {
-      const n = pos.node;
-      const nova = !chavesConhecidas.has(n.key);
-      const classes = ["no-avl"];
-      if (nova) classes.push("novo");
-      svg += `
-        <g class="${classes.join(" ")}" tabindex="0" data-key="${chaveSegura(n.key)}"
-           data-tag="${escaparAtributo(n.tag)}" data-altura="${n.height}" data-fb="${n.balance}" data-uso="${n.usage_count}"
-           transform="translate(${px(pos)}, ${py(pos)})">
-          <circle r="${RAIO}"></circle>
-          <text text-anchor="middle" dy="4">${encurtar(n.tag)}</text>
-          <text class="fb-texto" text-anchor="middle" dy="${RAIO + 13}">FB ${n.balance >= 0 ? "+" : ""}${n.balance}</text>
-        </g>`;
-    });
-
-    svg += `</svg>`;
-    return svg;
-  }
-
-  function encurtar(texto) {
-    const t = String(texto);
-    return t.length > 10 ? `${escaparAtributo(t.slice(0, 9))}…` : escaparAtributo(t);
-  }
-
-  function escaparAtributo(texto) {
-    return String(texto)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function anexarInteracoes() {
-    container.querySelectorAll(".no-avl").forEach((grupo) => {
-      grupo.addEventListener("mouseenter", (ev) => mostrarTooltip(grupo, ev));
-      grupo.addEventListener("mousemove", (ev) => posicionarTooltip(ev));
-      grupo.addEventListener("mouseleave", esconderTooltip);
-      grupo.addEventListener("focus", (ev) => mostrarTooltip(grupo, ev, true));
-      grupo.addEventListener("blur", esconderTooltip);
-    });
-  }
-
-  function mostrarTooltip(grupo, evento, viaFoco) {
-    const { tag, altura, fb, uso } = grupo.dataset;
-    tooltip.innerHTML = `
-      <strong>${tag}</strong>
-      <dl>
-        <dt>Altura</dt><dd>${altura}</dd>
-        <dt>Fator de balanceamento</dt><dd>${fb}</dd>
-        <dt>Uso</dt><dd>${uso} tópico(s)</dd>
-      </dl>`;
-    tooltip.hidden = false;
-    if (viaFoco) {
-      const retangulo = grupo.getBoundingClientRect();
-      const doContainer = container.getBoundingClientRect();
-      tooltip.style.left = `${retangulo.left - doContainer.left + 20}px`;
-      tooltip.style.top = `${retangulo.top - doContainer.top}px`;
-    } else {
-      posicionarTooltip(evento);
-    }
-  }
-
-  function posicionarTooltip(evento) {
-    const doContainer = container.getBoundingClientRect();
-    tooltip.style.left = `${evento.clientX - doContainer.left + 16}px`;
-    tooltip.style.top = `${evento.clientY - doContainer.top + 16}px`;
-  }
-
-  function esconderTooltip() {
-    tooltip.hidden = true;
-  }
-
-  // Ponto de entrada: recebe a resposta bruta de GET /api/avl.
-  function renderizar(respostaAvl) {
-    const raiz = extrairEstrutura(respostaAvl);
-
-    if (!raiz) {
-      // A API atual não expõe a estrutura aninhada — mostramos o texto,
-      // sem simular uma árvore gráfica que não corresponde a dados reais.
-      const texto = (respostaAvl && respostaAvl.text) || "(árvore vazia)";
-      container.innerHTML = `<pre class="fonte-tecnica" style="margin:0;padding:16px;color:var(--text-soft);white-space:pre;overflow:auto;width:100%;">${escaparAtributo(texto)}</pre>`;
-      return;
-    }
-
-    container.innerHTML = renderizarSvg(raiz);
-    anexarInteracoes();
-
-    // Atualiza o conjunto de chaves conhecidas para a próxima renderização
-    // saber quais nós são novos (usado só para a animação de entrada).
-    const novasChaves = new Set();
-    (function coletar(n) {
-      if (!n) return;
-      novasChaves.add(n.key);
-      coletar(n.left);
-      coletar(n.right);
-    })(raiz);
-    chavesConhecidas = novasChaves;
-  }
-
-  function limparEstadoConhecido() {
-    chavesConhecidas = new Set();
-  }
-
-  return { iniciar, renderizar, limparEstadoConhecido };
-})();
+    const cl = Math.abs(n.fb) > 1 ? 'bad' : Math.abs(n.fb) === 1 ? 'warn' : '';
+    const nome = n.tag.length > 12 ? n.tag.slice(0, 11) + '…' : n.tag;
+    nodes += `<g class="nd ${cl} ${opts.destaque === n.key ? 'novo' : ''} ${rot.has(n.tag) ? 'rot' : ''}" data-i="${idx}">
+      <rect x="${n.x - 48}" y="${n.y - 25}" width="96" height="58" rx="8"/>
+      <text class="t" x="${n.x}" y="${n.y - 8}" text-anchor="middle">${esc(nome)}</text>
+      <text x="${n.x}" y="${n.y + 7}" text-anchor="middle">H:${n.h} FB:${n.fb}</text>
+      <text x="${n.x}" y="${n.y + 23}" text-anchor="middle">Uso:${n.uso}</text></g>`;
+  });
+  box.classList.toggle('still', opts.animar === false);
+  box.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="min-width:${w}px" role="img" aria-label="Árvore AVL">${edges}${nodes}</svg>`;
+  box.scrollLeft = Math.max(0, root.x - box.clientWidth / 2); // centraliza a raiz na área visível
+  const tip = document.getElementById('tip');
+  box.querySelectorAll('.nd').forEach(g => {
+    const n = pos[+g.dataset.i];
+    g.onmousemove = ev => {
+      tip.style.display = 'block'; tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY + 14 + 'px';
+      tip.innerHTML = `<b>${esc(n.tag)}</b><br>Altura: ${n.h}<br>FB: ${n.fb}<br>Uso: ${n.uso}`;
+    };
+    g.onmouseleave = () => { tip.style.display = 'none'; };
+    g.onclick = () => {
+      box.querySelectorAll('.sel').forEach(x => x.classList.remove('sel'));
+      g.classList.add('sel');
+      if (opts.onSel) opts.onSel(n);
+    };
+  });
+  return pos;
+}

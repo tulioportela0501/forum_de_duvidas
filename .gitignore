@@ -1,33 +1,15 @@
-# Ambientes virtuais
+__pycache__/
+*.pyc
+.pytest_cache/
 .venv/
 venv/
-env/
-ENV/
-
-# Bytecode e cache do Python
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-*.egg-info/
-build/
-dist/
-
-# Variaveis de ambiente (dados sensiveis)
 .env
-.env.local
+backend/data/
+*.db
+backend/data/forum.db
+backend/data/secret_key.txt
+backend/data/codigo_admin.txt
 
-# IDEs e editores
-.vscode/
-.idea/
-*.swp
-*~
+secret_key.txt
 
-# Sistema operacional
-.DS_Store
-Thumbs.db
-
-# Arquivos temporarios
-*.log
-*.tmp
+codigo_admin.txt
