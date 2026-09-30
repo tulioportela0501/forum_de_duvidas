@@ -1,151 +1,135 @@
-# =============================================================================
-# routes.py
-# -----------------------------------------------------------------------------
-# Camada HTTP. De proposito ela e FINA: recebe a requisicao, chama o
-# TagService e devolve JSON. Nenhuma regra de negocio mora aqui.
-# =============================================================================
+"""Rotas da API. Públicas: leitura de tags/tópicos/membros, autocomplete e criação de dúvidas.
+Protegidas (@admin_required): árvore AVL, rotações, logs, dashboard, teste de carga e gestão de tags."""
+import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
-from .models import TagValidationError
-from .services import TagService
+from admin_auth import admin_required
+from service import Conflito, ErroValidacao
 
-api = Blueprint("api", __name__)
-
-# Instancia unica do servico. Como o MVP guarda tudo em memoria (item 13),
-# essa instancia vive enquanto o processo Flask estiver rodando.
-service = TagService()
+bp = Blueprint('api', __name__, url_prefix='/api')
+_posts = {}
 
 
-@api.errorhandler(TagValidationError)
-def handle_validation_error(error):
-    # Traduz violacao de regra de negocio em HTTP 400.
-    return jsonify({"error": str(error)}), 400
+def _svc():
+    return current_app.extensions['servico']
 
 
-# -----------------------------------------------------------------------------
-# RF01 / RF07 / RF08 — POST /api/tags
-# -----------------------------------------------------------------------------
-@api.post("/tags")
-def create_tag():
-    # Cadastra uma tag nova ou incrementa o uso de uma existente.
-    data = request.get_json(silent=True) or {}
+def _repo():
+    return current_app.extensions['repo']
+
+
+def _admin():
+    return getattr(g, 'admin_email', None)
+
+
+def _limite_posts(max_por_min=20):
+    ip, agora = request.remote_addr or '?', time.time()
+    _posts[ip] = [t for t in _posts.get(ip, []) if agora - t < 60]
+    if len(_posts[ip]) >= max_por_min:
+        return True
+    _posts[ip].append(agora)
+    return False
+
+
+@bp.get('/health')
+def health():
+    return jsonify(status='ok')
+
+
+# ---------------------------------------------------------------- tags
+@bp.get('/tags')
+def listar_tags():
+    return jsonify(_svc().listar_tags())
+
+
+@bp.get('/tags/autocomplete')
+def autocompletar():
+    q = request.args.get('q', '')
     try:
-        result = service.add_tag(data.get("tag"), data.get("description", ""))
-    except TagValidationError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    # 201 quando um no novo nasceu; 200 quando so incrementamos o contador.
-    return jsonify(result), 201 if result["created"] else 200
-
-
-# -----------------------------------------------------------------------------
-# RF06 — GET /api/tags
-# -----------------------------------------------------------------------------
-@api.get("/tags")
-def list_tags():
-    # Listagem alfabetica completa (percurso in-order).
-    return jsonify({"tags": service.list_tags()})
-
-
-# -----------------------------------------------------------------------------
-# RF05 — GET /api/tags/search?q=
-# -----------------------------------------------------------------------------
-@api.get("/tags/search")
-def search_tags():
-    # Endpoint consumido pelo autocomplete do frontend.
-    query = request.args.get("q", "")
-    try:
-        limit = int(request.args.get("limit", 10))
+        limite = max(1, min(int(request.args.get('limit', 8)), 20))
     except ValueError:
-        limit = 10
-    return jsonify({"query": query, "suggestions": service.search_prefix(query, limit)})
+        limite = 8
+    return jsonify(_svc().autocompletar(q, limite))
 
 
-# -----------------------------------------------------------------------------
-# RF04 — GET /api/tags/<tag>
-# -----------------------------------------------------------------------------
-@api.get("/tags/<path:tag>")
-def get_tag(tag):
-    # Busca exata, case-insensitive (RN01).
-    found = service.get_tag(tag)
-    if found is None:
-        return jsonify({"error": "Tag nao encontrada."}), 404
-    return jsonify({"tag": found})
-
-
-# -----------------------------------------------------------------------------
-# RF07 — POST /api/tags/<tag>/use  e  /unuse
-# -----------------------------------------------------------------------------
-@api.post("/tags/<path:tag>/use")
-def use_tag(tag):
-    # Simula a associacao da tag a um novo topico (UC01).
-    updated = service.increment_usage(tag)
-    if updated is None:
-        return jsonify({"error": "Tag nao encontrada."}), 404
-    return jsonify({"tag": updated})
-
-
-@api.post("/tags/<path:tag>/unuse")
-def unuse_tag(tag):
-    # Simula a exclusao de um topico que usava a tag (UC03).
-    # Quando o contador chega a zero, a tag passa a ser removivel (RN02).
-    updated = service.decrement_usage(tag)
-    if updated is None:
-        return jsonify({"error": "Tag nao encontrada."}), 404
-    return jsonify({"tag": updated})
-
-
-# -----------------------------------------------------------------------------
-# RF03 + RN02 — DELETE /api/tags/<tag>
-# -----------------------------------------------------------------------------
-@api.delete("/tags/<path:tag>")
-def delete_tag(tag):
-    # A remocao pode ser recusada pela RN02 (contador maior que zero).
+@bp.post('/tags')
+@admin_required
+def criar_tag():
+    d = request.get_json(silent=True) or {}
     try:
-        service.remove_tag(tag)
-    except TagValidationError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"removed": tag})
+        tag, rot = _svc().criar_tag(d.get('nome') or d.get('tag'), d.get('descricao', ''))
+    except ErroValidacao as e:
+        return jsonify(erro=str(e)), 400
+    except Conflito as e:
+        return jsonify(erro=str(e)), 409
+    _repo().registrar_log(_admin(), f"criar tag '{tag['display_name']}'", f'ok ({len(rot)} rotação(ões))')
+    return jsonify(tag=tag, rotacoes=rot), 201
 
 
-# -----------------------------------------------------------------------------
-# RF09 — GET /api/avl
-# -----------------------------------------------------------------------------
-@api.get("/avl")
-def avl_view():
-    # Estrutura completa da arvore para a area de debug academico (UC04).
-    return jsonify(service.tree_view())
+@bp.delete('/tags/<path:nome>')
+@admin_required
+def remover_tag(nome):
+    if not _svc().remover_tag(nome):
+        return jsonify(erro='Tag não encontrada.'), 404
+    _repo().registrar_log(_admin(), f"remover tag '{nome}'", 'ok')
+    return jsonify(ok=True)
 
 
-# -----------------------------------------------------------------------------
-# RF10 — GET /api/metrics
-# -----------------------------------------------------------------------------
-@api.get("/metrics")
-def metrics():
-    # Altura, numero de nos, rotacoes e validacao do RNF05.
-    return jsonify(service.metrics())
+# ---------------------------------------------------------------- tópicos
+@bp.get('/topicos')
+def listar_topicos():
+    return jsonify(_repo().listar_topicos())
 
 
-# -----------------------------------------------------------------------------
-# Utilitarios de apresentacao (nao sao requisito, mas ajudam na demo)
-# -----------------------------------------------------------------------------
-@api.post("/reset")
-def reset():
-    # Limpa o dicionario para demonstracoes.
-    service.reset()
-    return jsonify({"reset": True})
+@bp.post('/topicos')
+def criar_topico():
+    if _limite_posts():
+        return jsonify(erro='Muitas dúvidas em pouco tempo. Aguarde um minuto.'), 429
+    d = request.get_json(silent=True) or {}
+    try:
+        t = _svc().criar_topico(d.get('titulo'), d.get('descricao'), d.get('autor'), d.get('tags'))
+    except ErroValidacao as e:
+        return jsonify(erro=str(e)), 400
+    _repo().registrar_log(t['autor'] or 'anônimo', f"nova dúvida '{t['titulo']}'", f"ok ({len(t['tags'])} tag(s))")
+    return jsonify(t), 201
 
 
-@api.post("/seed")
-def seed():
-    # Carrega o cenario obrigatorio do item 5.4: aula1..aula20 inseridas em
-    # ordem alfabetica estrita. Permite mostrar ao vivo, na interface, que a
-    # arvore NAO degenerou em lista encadeada.
-    service.reset()
-    # sorted() aqui ordena apenas a ENTRADA do teste (para garantir a ordem
-    # alfabetica estrita exigida pelo documento). A estrutura de dados do
-    # sistema continua sendo exclusivamente a AVL.
-    for tag in sorted(f"aula{i}" for i in range(1, 21)):
-        service.add_tag(tag, "Tag do cenario de teste obrigatorio")
-    return jsonify({"seeded": 20, "metrics": service.metrics()})
+# ---------------------------------------------------------------- membros
+@bp.get('/membros')
+def listar_membros():
+    return jsonify(_repo().listar_membros())
+
+
+# ---------------------------------------------------------------- administração
+@bp.get('/avl')
+@admin_required
+def avl():
+    return jsonify(_svc().snapshot())
+
+
+@bp.get('/avl/rotacoes')
+@admin_required
+def rotacoes():
+    return jsonify(_repo().resumo_rotacoes())
+
+
+@bp.post('/avl/teste')
+@admin_required
+def teste():
+    r = _svc().teste_carga('aula', 20)
+    _repo().registrar_log(_admin(), 'teste de carga aula1→aula20',
+                          f"ok ({r['resumo']['rotacoes']} rotações, altura {r['resumo']['altura']})")
+    return jsonify(r)
+
+
+@bp.get('/logs')
+@admin_required
+def logs():
+    return jsonify(_repo().listar_logs())
+
+
+@bp.get('/dashboard')
+@admin_required
+def dashboard():
+    return jsonify(_svc().dashboard())
