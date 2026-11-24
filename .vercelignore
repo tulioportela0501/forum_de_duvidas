@@ -1,0 +1,8 @@
+tests/
+data/
+.vscode/
+.env
+.env.local
+scripts/
+*.db
+__pycache__/

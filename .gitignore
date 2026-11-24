@@ -4,12 +4,7 @@ __pycache__/
 .venv/
 venv/
 .env
-backend/data/
+.env.local
+data/
 *.db
-backend/data/forum.db
-backend/data/secret_key.txt
-backend/data/codigo_admin.txt
-
-secret_key.txt
-
-codigo_admin.txt
+.vercel/

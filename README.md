@@ -1,83 +1,125 @@
-# Plataforma de Fórum de Dúvidas Acadêmicas — Dicionário de Tags com Árvore AVL
+# Fórum de Dúvidas Acadêmicas — Dicionário de Tags com Árvore AVL
 
-Projeto da disciplina **Algoritmos e Estrutura de Dados Avançado** (Faculdade Anhanguera de São Luís — MA, 2026).
-Estudantes publicam dúvidas com tags; cada tag vive em uma **Árvore AVL implementada manualmente** em Python
-(sem dict/set/sorted/bibliotecas como substituto), com contador de uso, busca, remoção, autocomplete e visualização.
+Disciplina **Algoritmos e Estrutura de Dados Avançado** (Anhanguera São Luís — MA, 2026).
+Stack: **Python + Flask** (API), **HTML/CSS/JS puro** (front), **Turso (libSQL)** (persistência), **Vercel** (deploy serverless).
 
-## Como rodar
+## Arquitetura
+```
+public/            frontend estático (index.html, login.html, css/, js/)   -> CDN da Vercel
+api/index.py       função serverless: expõe o app Flask                              -> /api/*
+forum/             avl.py (AVL manual, INALTERADA) · service.py · repo.py · db.py · config.py
+                   auth.py (sessões, login, permissões) · usuarios.py (gestão de contas) · routes.py (fórum)
+scripts/           init_db.py (cria tabelas) · check_connection.py (testa banco)
+tests/             ~250 testes (AVL, API, autenticação, permissões e drivers; API roda em SQLite e em Turso simulado)
+vercel.json        rewrite /api/* -> api/index ; cabeçalhos de segurança
+```
+**Serverless e a AVL:** funções da Vercel não guardam estado. O banco (tabela `tags`) é a fonte da verdade; a
+cada requisição a árvore AVL manual é **reconstruída em memória** a partir das tags, a operação roda nela
+(inserção, busca, remoção, rotações, prefixo) e o resultado é gravado em **uma transação** (tags + tópico + rotações).
+O contador de uso é incrementado no SQL (`usage_count = usage_count + 1`), seguro entre instâncias concorrentes.
+Limitador de tentativas e rotações também ficam no banco.
 
+**Drivers** (`forum/db.py`, só biblioteca padrão): `SqliteDb` (local) e `TursoDb` (API HTTP `/v2/pipeline` do Turso,
+sem dependência nativa). Se `TURSO_DATABASE_URL` estiver vazia, usa SQLite em `data/forum.db`.
+
+## Rodar localmente (VS Code)
 ```bash
-# Windows: dê dois cliques em run.bat      Linux/Mac: ./run.sh
-# ou manualmente:
-cd backend
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
+python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+python run_local.py                                       # http://127.0.0.1:5000
+```
+Windows/Linux: `run.bat` / `./run.sh` fazem o mesmo. Sem `.env`, usa SQLite local e gera
+o `SECRET_KEY` em `data/`. No primeiro acesso, abra o endereço e crie o administrador principal. No VS Code: **Terminal > Run Task** (instalar, iniciar,
+criar tabelas, testar conexão, testes) ou **F5** (`.vscode/launch.json`).
+
+## Variáveis de ambiente (`.env.example`)
+| Variável | Local | Vercel |
+|---|---|---|
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | opcional (vazio = SQLite) | **obrigatório** |
+| `SECRET_KEY` | gerado em `data/` se vazio | **obrigatório** |
+| `SESSION_MAX_AGE` / `SESSION_IDLE` | 8 h / 2 h | idem (opcional) |
+| `AUTO_INIT_DB` | padrão 1 (SQLite) | padrão 0 → use `scripts/init_db.py` |
+
+## Turso
+```bash
+turso db create forum-avl
+turso db show forum-avl --url          # TURSO_DATABASE_URL  (libsql://...)
+turso db tokens create forum-avl       # TURSO_AUTH_TOKEN
+```
+Coloque os dois no `.env`, depois:
+```bash
+python scripts/init_db.py                      # cria as tabelas no Turso (idempotente)
+python scripts/check_connection.py --remote    # testa conexão + escrita/leitura
+python scripts/check_connection.py --local     # idem, em SQLite temporário
 ```
 
-Abra **http://127.0.0.1:5000**. O mesmo servidor entrega API e frontend (sem problemas de CORS).
-Ao iniciar, o console mostra o **código de cadastro de administrador**.
+## Deploy na Vercel
+1. Suba o projeto ao GitHub e importe na Vercel (framework: *Other*; sem build command).
+2. Em *Settings > Environment Variables* cadastre `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `SECRET_KEY`
+   (ex.: `python -c "import secrets;print(secrets.token_hex(32))"`).
+3. Rode `python scripts/init_db.py` uma vez (local, apontando para o Turso).
+4. Deploy. **Abra o site imediatamente e crie o administrador principal** (ver abaixo). Verifique `https://SEU-PROJETO.vercel.app/api/health` → `{"status":"ok", ...}`.
+Teste local do ambiente Vercel: `vercel dev` (usa `.env.local` gerado por `vercel env pull`).
 
-## Rodando com o Go Live (Live Server) no VS Code
-O Go Live só serve arquivos estáticos; a API precisa do Flask rodando ao mesmo tempo:
-1. Terminal 1 (fica aberto): `cd backend` → `python -m pip install -r requirements.txt` (só na 1ª vez) → `python app.py`
-   (ou `Terminal > Run Task > Backend: iniciar`).
-2. Clique com o botão direito em `frontend/index.html` → **Open with Live Server** (ou botão *Go Live*).
-3. O front descobre sozinho o backend em `http://127.0.0.1:5000`. Se o backend estiver desligado, a tela avisa e o
-   botão *Tentar novamente* funciona assim que você iniciá-lo.
+`/api/health` responde 503 com `esquema_pendente` (tabelas não criadas) ou `erro` (banco inacessível).
 
-A pasta `.vscode/` já configura o Live Server para servir `/frontend` e **ignorar `backend/`** (senão cada gravação
-no banco recarregaria a página e cortaria a animação da AVL).
+## Autenticação e permissões
+**Primeiro acesso:** enquanto não existe nenhum usuário, `login.html` mostra a criação do **administrador principal**
+(`POST /api/auth/setup`). Depois disso a rota responde 409 para sempre e **somente administradores cadastram contas**.
+Quem abrir um deploy novo primeiro vira o principal — por isso crie-o logo após o deploy.
 
-## Área administrativa
-1. Abra `Área administrativa` → *Entrar / cadastrar* → **Cadastrar (código de acesso)**.
-2. Informe nome, e-mail, senha (mín. 10 caracteres) e o código exibido no console.
-3. O código e a `SECRET_KEY` **não ficam no código-fonte**: vêm de `.env`/variáveis de ambiente
-   (veja `.env.example`) ou são gerados na 1ª execução em `backend/data/` (ignorado pelo git).
-   Defina `CODIGO_ADMIN` no `.env` para escolher o seu, e troque-o após a entrega.
-4. Rotas protegidas por token (8 h): árvore AVL, rotações, logs, dashboard, teste de carga, criar/remover tags.
-   Limite de 8 tentativas falhas / 15 min por IP.
+| Perfil | Pode |
+|---|---|
+| **Aluno** | ler tags, dúvidas e membros; publicar dúvidas (o autor é sempre o nome da sessão) |
+| **Professor** (verificado) | tudo do aluno + criar tags, ver árvore AVL, rotações, painel e teste de carga |
+| **Administrador** | tudo + remover tags, ver logs e gerenciar usuários |
+
+* **Professor precisa de verificação administrativa:** nasce "aguardando verificação" e não consegue entrar até um
+  administrador usar *Verificar professor*. A verificação cai se o e-mail mudar, se o perfil mudar ou se for
+  revogada (a sessão aberta é derrubada na hora).
+* **Administrador principal:** só ele mesmo o altera; ninguém (nem ele) o bloqueia, exclui ou rebaixa — o sistema nunca fica sem administrador.
+  Ninguém bloqueia, exclui ou muda o próprio perfil; a própria senha só muda em *Minha conta* (exige a senha atual).
+* **Sessões:** cookie `forum_sid` aleatório (256 bits), `HttpOnly`, `SameSite=Strict`, `Secure` em HTTPS; o banco guarda só o
+  HMAC dele. Expira em 8 h (absoluto) ou 2 h sem uso, e é revogada ao bloquear, excluir, trocar perfil/senha ou revogar verificação.
+  Perfil, status e verificação são relidos do banco **a cada requisição**.
+* **Backend nega por padrão:** toda rota `/api/*` exige sessão, exceto `health`, `auth/estado`, `auth/setup` e `auth/login`;
+  o perfil exigido é declarado com `@perfis(...)`. Ações que alteram dados exigem o cabeçalho `X-CSRF-Token` e origem do mesmo site.
+* **Senhas:** scrypt com sal; mínimo 10 caracteres, letras e números; login com mesma mensagem para e-mail inexistente/senha errada;
+  limite de 8 falhas/15 min por IP e 20 por e-mail.
+* Contas do fluxo antigo (tabela `admins`) são migradas para administradores por `scripts/init_db.py` (ou ao iniciar, no SQLite local).
+* Local com front em outra porta (ex.: Live Server): abra a página com o mesmo host do backend (`127.0.0.1` com `127.0.0.1`),
+  senão o navegador não envia o cookie.
 
 ## API
 | Método | Rota | Acesso |
 |---|---|---|
-| GET | `/api/tags`, `/api/tags/autocomplete?q=`, `/api/topicos`, `/api/membros`, `/api/health` | público |
-| POST | `/api/topicos` `{titulo, descricao, autor, tags[]}` | público (20/min por IP) |
-| POST/DELETE | `/api/tags`, `/api/tags/<nome>` | admin |
-| GET | `/api/avl`, `/api/avl/rotacoes`, `/api/logs`, `/api/dashboard` | admin |
-| POST | `/api/avl/teste` (aula1→aula20 em árvore temporária) | admin |
-| POST | `/api/admin/registro`, `/api/admin/login` | público |
+| GET | `/api/health`, `/api/auth/estado` | público |
+| POST | `/api/auth/setup` (só sem usuários), `/api/auth/login` | público (8 falhas/15 min por IP) |
+| GET/POST | `/api/auth/eu`, `/api/auth/logout`, `/api/auth/senha` | logado |
+| GET | `/api/tags`, `/api/tags/autocomplete?q=`, `/api/topicos`, `/api/membros` | logado |
+| POST | `/api/topicos` `{titulo, descricao, tags[]}` | logado (20/min por usuário) |
+| POST | `/api/tags` | professor, admin |
+| GET | `/api/avl`, `/api/avl/rotacoes`, `/api/dashboard` · POST `/api/avl/teste` | professor, admin |
+| DELETE | `/api/tags/<nome>` · GET `/api/logs` | admin |
+| GET/POST | `/api/usuarios` (listar / cadastrar) | admin |
+| GET/PATCH/DELETE | `/api/usuarios/<id>` | admin |
+| POST | `/api/usuarios/<id>/bloquear`, `/desbloquear`, `/verificar`, `/revogar-verificacao` | admin |
 
-## Estrutura
-```
-backend/  app.py (fábrica Flask) · avl.py (AVL manual) · service.py (regras) · database.py (SQLite)
-          routes.py · admin_auth.py · config.py · tests/
-frontend/ index.html · admin-cadastro.html · css/style.css · js/{api,arvore,app}.js
-```
-Dados persistem em SQLite (`backend/data/forum.db`); a AVL é reconstruída na inicialização.
-Para PostgreSQL/MySQL, reescreva apenas `database.py`.
-
-## Como a AVL funciona
-Cada nó guarda tag, contador de uso e altura. **Fator de balanceamento (FB) = altura(esq) − altura(dir)**;
-se |FB| > 1 após inserir/remover, rotaciona:
-
-| Caso | Situação | Correção |
-|---|---|---|
-| **LL** | FB > 1 e filho esquerdo com FB ≥ 0 | rotação simples à direita |
-| **RR** | FB < −1 e filho direito com FB ≤ 0 | rotação simples à esquerda |
-| **LR** | FB > 1 e filho esquerdo com FB < 0 | esquerda no filho, depois direita no nó |
-| **RL** | FB < −1 e filho direito com FB > 0 | direita no filho, depois esquerda no nó |
-
-**Complexidade:** busca, inserção e remoção são **O(log n)** (altura ≤ ~1,44·log₂ n); o autocomplete por
-prefixo poda a árvore e custa **O(log n + k)**; percurso em ordem é O(n). Tags são comparadas sem acento e sem
-diferenciar maiúsculas (`Programação` = `programacao`); inserir uma tag existente apenas incrementa o uso.
-Remoção trata folha, um filho e dois filhos (sucessor in-order).
+## AVL (resumo)
+`forum/avl.py` é a implementação manual original, **sem nenhuma alteração**: nós com ponteiros, altura,
+FB = h(esq) − h(dir), rotações LL/RR/LR/RL, remoção com sucessor in-order, prefixo com poda. Busca, inserção e
+remoção O(log n); autocomplete O(log n + k). Tags comparadas sem acento/caixa.
 
 ## Testes
 ```bash
-cd backend && python -m pytest -q     # 30 testes: AVL (LL/RR/LR/RL, remoções, 1500 operações aleatórias) e API
+python -m pytest -q      # ~250 testes (a suíte de API roda duas vezes: SQLite e Turso simulado)
 ```
+`tests/mock_turso.py` simula o endpoint `/v2/pipeline` do Turso sobre SQLite, então o mesmo conjunto de testes de
+API roda com o driver remoto sem rede.
 
-## Limitações conhecidas
-* Use **um único processo** (a AVL fica em memória): `python app.py`, sem múltiplos workers do gunicorn.
-* O servidor embutido do Flask é para desenvolvimento/demonstração.
+## Limitações conhecidas (próximas etapas)
+* Reconstrução da AVL a cada requisição: ideal para centenas/milhares de tags; a forma da árvore após remoções
+  pode diferir da anterior (as chaves e contadores são idênticos).
+* Sem recuperação de senha por e-mail (um administrador redefine a senha em *Usuários*).
+* Sem paginação de tópicos; respostas/visualizações ainda não implementadas.
+* O ranking do dashboard ainda usa `sorted()` (fora da AVL).

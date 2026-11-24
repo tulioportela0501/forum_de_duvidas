@@ -1,29 +1,11 @@
 {
   "version": "2.0.0",
   "tasks": [
-    {
-      "label": "Backend: instalar dependências",
-      "type": "shell",
-      "command": "python -m pip install -r requirements.txt",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "problemMatcher": []
-    },
-    {
-      "label": "Backend: iniciar (porta 5000)",
-      "type": "shell",
-      "command": "python app.py",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "isBackground": true,
-      "presentation": { "panel": "dedicated" },
-      "problemMatcher": []
-    },
-    {
-      "label": "Backend: testes",
-      "type": "shell",
-      "command": "python -m pytest -q",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "group": "test",
-      "problemMatcher": []
-    }
+    { "label": "Instalar dependências", "type": "shell", "command": "python -m pip install -r requirements-dev.txt", "problemMatcher": [] },
+    { "label": "Iniciar servidor local (5000)", "type": "shell", "command": "python run_local.py", "isBackground": true, "presentation": { "panel": "dedicated" }, "problemMatcher": [] },
+    { "label": "Criar tabelas (init_db)", "type": "shell", "command": "python scripts/init_db.py", "problemMatcher": [] },
+    { "label": "Testar conexão local", "type": "shell", "command": "python scripts/check_connection.py --local", "problemMatcher": [] },
+    { "label": "Testar conexão Turso (remota)", "type": "shell", "command": "python scripts/check_connection.py --remote", "problemMatcher": [] },
+    { "label": "Testes", "type": "shell", "command": "python -m pytest -q", "group": "test", "problemMatcher": [] }
   ]
 }
