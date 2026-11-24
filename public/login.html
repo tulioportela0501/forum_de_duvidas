@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Entrar — Fórum AVL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Cinzel:wght@500;600;700&family=Manrope:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+  <section class="login-hero" aria-hidden="false">
+    <div class="logo"><i></i>Fórum AVL</div>
+    <svg class="lh-tree" viewBox="0 0 360 200" role="img" aria-label="Ilustração de uma árvore AVL balanceada"><line class="lh-e" style="--d:0.35s" x1="180" y1="30" x2="100" y2="98"/><line class="lh-e" style="--d:0.35s" x1="180" y1="30" x2="260" y2="98"/><line class="lh-e" style="--d:0.65s" x1="100" y1="98" x2="60" y2="168"/><line class="lh-e" style="--d:0.65s" x1="100" y1="98" x2="140" y2="168"/><line class="lh-e" style="--d:0.65s" x1="260" y1="98" x2="220" y2="168"/><line class="lh-e" style="--d:0.65s" x1="260" y1="98" x2="300" y2="168"/><g class="lh-n" style="--d:0.2s"><circle cx="180" cy="30" r="18"/><text x="180" y="30">8</text></g><g class="lh-n" style="--d:0.5s"><circle cx="100" cy="98" r="18"/><text x="100" y="98">4</text></g><g class="lh-n" style="--d:0.5s"><circle cx="260" cy="98" r="18"/><text x="260" y="98">12</text></g><g class="lh-n" style="--d:0.8s"><circle cx="60" cy="168" r="18"/><text x="60" y="168">2</text></g><g class="lh-n" style="--d:0.8s"><circle cx="140" cy="168" r="18"/><text x="140" y="168">6</text></g><g class="lh-n" style="--d:0.8s"><circle cx="220" cy="168" r="18"/><text x="220" y="168">10</text></g><g class="lh-n" style="--d:0.8s"><circle cx="300" cy="168" r="18"/><text x="300" y="168">14</text></g></svg>
+    <h2>Dúvidas acadêmicas organizadas por tags.</h2>
+    <p>Pergunte, responda e acompanhe tudo em um só lugar, com cada perfil vendo o que precisa.</p>
+    <div class="lh-roles"><span style="--c:#2F7BFF">Aluno</span><span style="--c:#22C7F2">Professor</span><span style="--c:#7C83FF">Administrador</span></div>
+  </section>
+  <main class="card login-card" aria-live="polite">
+    <div class="logo login-logo"><i></i>Fórum AVL</div>
+    <div id="carregando" class="sub">Verificando o sistema…</div>
+
+    <form id="f-login" hidden novalidate>
+      <h1>Entrar</h1>
+      <p class="sub">Use a conta criada pelo administrador.</p>
+      <label for="l-email">E-mail</label>
+      <input id="l-email" type="email" autocomplete="username" required>
+      <label for="l-senha">Senha</label>
+      <input id="l-senha" type="password" autocomplete="current-password" required>
+      <button class="btn wide" type="submit">Entrar</button>
+    </form>
+
+    <form id="f-setup" hidden novalidate>
+      <h1>Primeiro acesso</h1>
+      <p class="sub">Nenhum usuário existe ainda. Crie o <b>administrador principal</b>: depois disso esta tela some e
+        somente administradores cadastram novas contas.</p>
+      <label for="s-nome">Nome</label>
+      <input id="s-nome" autocomplete="name" maxlength="100" required>
+      <label for="s-email">E-mail</label>
+      <input id="s-email" type="email" autocomplete="username" required>
+      <label for="s-senha">Senha <span class="mut">(mín. 10 caracteres, com letras e números)</span></label>
+      <input id="s-senha" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      <label for="s-conf">Repita a senha</label>
+      <input id="s-conf" type="password" autocomplete="new-password" required>
+      <button class="btn wide" type="submit">Criar administrador principal</button>
+    </form>
+
+    <p class="msg" id="msg" role="alert"></p>
+    <button class="btn ghost wide" id="retry" type="button" hidden>Tentar novamente</button>
+  </main>
+  <script src="js/api.js"></script>
+  <script>
+    const el = id => document.getElementById(id);
+    const msg = (t, ok) => { el('msg').textContent = t || ''; el('msg').className = 'msg' + (ok ? ' ok' : ''); };
+
+    async function iniciar() {
+      msg(''); el('retry').hidden = true; el('carregando').hidden = false;
+      el('f-login').hidden = el('f-setup').hidden = true;
+      try {
+        try { await req(EP.eu); location.replace('index.html'); return; } catch (e) { if (e.status !== 401) throw e; }
+        const { configurado } = await req(EP.estado);
+        el('carregando').hidden = true;
+        el(configurado ? 'f-login' : 'f-setup').hidden = false;
+        el(configurado ? 'l-email' : 's-nome').focus();
+      } catch (e) {
+        el('carregando').hidden = true; el('retry').hidden = false; msg(e.message);
+      }
+    }
+
+    async function enviar(ev, caminho, corpo) {
+      ev.preventDefault();
+      const b = ev.target.querySelector('button[type=submit]');
+      b.disabled = true; b.classList.add('load'); msg('');
+      try {
+        await post(caminho, corpo);                 // o servidor grava o cookie de sessão (HttpOnly)
+        location.replace('index.html');
+      } catch (e) {
+        msg(e.message); b.disabled = false; b.classList.remove('load');
+        const c = document.querySelector('.login-card'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+      }
+    }
+
+    el('f-login').onsubmit = ev => enviar(ev, EP.login, { email: el('l-email').value, senha: el('l-senha').value });
+    el('f-setup').onsubmit = ev => {
+      if (el('s-senha').value !== el('s-conf').value) { ev.preventDefault(); msg('As senhas não coincidem.'); return; }
+      enviar(ev, EP.setup, { nome: el('s-nome').value, email: el('s-email').value, senha: el('s-senha').value });
+    };
+    document.querySelectorAll('input[type=password]').forEach(i => {
+      const w = document.createElement('div'), b = document.createElement('button');
+      w.className = 'pw'; b.type = 'button'; b.className = 'pwt'; b.textContent = 'Mostrar'; b.setAttribute('aria-label', 'Mostrar senha');
+      i.replaceWith(w); w.append(i, b);
+      b.onclick = () => { const v = i.type === 'password'; i.type = v ? 'text' : 'password'; b.textContent = v ? 'Ocultar' : 'Mostrar'; b.setAttribute('aria-label', v ? 'Ocultar senha' : 'Mostrar senha'); };
+    });
+    el('retry').onclick = iniciar;
+    iniciar();
+  </script>
+</body>
+</html>
